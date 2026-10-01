@@ -1,0 +1,89 @@
+# Podman override for docker-compose.example.yml. Not a standalone compose file.
+#
+#   podman compose -f docker-compose.example.yml -f contrib/podman/compose.podman.yml --env-file .env up -d
+#
+# Requires Docker Compose v2.24 or newer for the !reset / !override tags,
+# service_healthy, and anchors. `stack doctor` checks the version.
+#
+# ${NOJOIN_IMAGE_TAG:-2.5.1} must stay equal to NojoinTag in contrib/images.psd1.
+# `images pin` rewrites the default. `stack start` also exports NOJOIN_IMAGE_TAG
+# from that file, which wins over the default.
+# ${PODMAN_SOCKET} is the in-machine socket from `podman info`. The default
+# exists so `compose config` renders when the variable is unset; start replaces it.
+
+services:
+  db:
+    image: docker.io/pgvector/pgvector:pg18-trixie
+    logging: !reset null
+
+  redis:
+    image: docker.io/library/redis:alpine
+    logging: !reset null
+
+  socket-proxy:
+    image: docker.io/tecnativa/docker-socket-proxy
+    volumes: !override
+      - "${PODMAN_SOCKET:-/run/user/1000/podman/podman.sock}:/var/run/docker.sock:ro"
+    security_opt:
+      - label=disable
+    logging: !reset null
+
+  api:
+    image: ghcr.io/valtora/nojoin-api:${NOJOIN_IMAGE_TAG:-2.5.1}
+    logging: !reset null
+
+  worker-gpu:
+    image: ghcr.io/valtora/nojoin-worker:${NOJOIN_IMAGE_TAG:-2.5.1}
+    # Drops the upstream NVIDIA deploy reservation. CPU is the default.
+    # `stack start -Gpu` adds compose.gpu.yml, which requests the CDI device.
+    deploy: !reset null
+    logging: !reset null
+    # Upstream sets these five to 2 on every worker. Only the ASR worker is
+    # raised. worker-cpu, worker-io, and worker-parse keep 2. Set
+    # NOJOIN_ASR_THREADS in .env (default 8), then `stack start` recreates
+    # this service. Do not exceed the CPU count; leave room for the others.
+    environment:
+      OMP_NUM_THREADS: ${NOJOIN_ASR_THREADS:-8}
+      MKL_NUM_THREADS: ${NOJOIN_ASR_THREADS:-8}
+      OPENBLAS_NUM_THREADS: ${NOJOIN_ASR_THREADS:-8}
+      NUMEXPR_NUM_THREADS: ${NOJOIN_ASR_THREADS:-8}
+      VECLIB_MAXIMUM_THREADS: ${NOJOIN_ASR_THREADS:-8}
+
+  worker-cpu:
+    image: ghcr.io/valtora/nojoin-worker:${NOJOIN_IMAGE_TAG:-2.5.1}
+    logging: !reset null
+
+  worker-io:
+    image: ghcr.io/valtora/nojoin-worker-io:${NOJOIN_IMAGE_TAG:-2.5.1}
+    # Pinned image only. buildah does not implement docker-image:// contexts,
+    # so the upstream additional_contexts build must not run.
+    build: !reset null
+    logging: !reset null
+
+  worker-parse:
+    image: ghcr.io/valtora/nojoin-worker-io:${NOJOIN_IMAGE_TAG:-2.5.1}
+    logging: !reset null
+
+  frontend:
+    image: ghcr.io/valtora/nojoin-frontend:${NOJOIN_IMAGE_TAG:-2.5.1}
+    logging: !reset null
+
+  nginx:
+    image: docker.io/library/nginx:alpine
+    # Upstream nginx has no command. The image CMD is `nginx -g 'daemon off;'`.
+    # /docker-entrypoint.d/*.sh runs only when the file is executable, and a bind
+    # from a Windows drive is not reliably executable. The resolver and init-ssl.sh
+    # are mounted outside that directory and invoked with sh, then the official
+    # entrypoint runs (listen, envsubst, worker_processes) and execs nginx.
+    # Upstream nginx.conf stays beside the real path so the resolver can write
+    # /etc/nginx/nginx.conf with aardvark-dns in place of 127.0.0.11.
+    entrypoint:
+      - sh
+      - -c
+      - "set -eu; sh /opt/maku/05-podman-resolver.sh; sh /opt/maku/init-ssl.sh; exec /docker-entrypoint.sh nginx -g 'daemon off;'"
+    volumes: !override
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf.upstream:ro
+      - ./nginx:/etc/nginx/certs
+      - ./docker/init-ssl.sh:/opt/maku/init-ssl.sh:ro
+      - ./contrib/podman/nginx/05-podman-resolver.sh:/opt/maku/05-podman-resolver.sh:ro
+    logging: !reset null

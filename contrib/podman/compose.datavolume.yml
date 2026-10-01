@@ -1,0 +1,38 @@
+# Replaces the ./data bind with the named volume nojoin_data.
+# Applied when the saved mode has DataVolume. `stack start -DataVolume` turns
+# that mode on. Recordings then live in the volume; `stack backup` exports it.
+# Switching this on does not move files that are already in ./data. start,
+# install, and update refuse that switch while ./data is not empty unless
+# -IgnoreExistingData is set.
+services:
+  api:
+    volumes: !override
+      - nojoin_data:/app/data
+      - model_cache:/shared_model_cache:ro
+
+  worker-gpu:
+    volumes: !override
+      - nojoin_data:/app/data
+      - model_cache:/home/appuser/.cache
+      - /sys/class/drm:/sys/class/drm:ro
+
+  worker-cpu:
+    volumes: !override
+      - nojoin_data:/app/data
+      - model_cache:/home/appuser/.cache
+      - /sys/class/drm:/sys/class/drm:ro
+
+  worker-io:
+    volumes: !override
+      - nojoin_data:/app/data
+      - model_cache:/home/appuser/.cache
+      - /sys/class/drm:/sys/class/drm:ro
+
+  worker-parse:
+    volumes: !override
+      - nojoin_data:/app/data
+      - model_cache:/home/appuser/.cache
+      - /sys/class/drm:/sys/class/drm:ro
+
+volumes:
+  nojoin_data:

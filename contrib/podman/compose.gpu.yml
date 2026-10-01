@@ -1,0 +1,10 @@
+# EXPERIMENTAL and untested. Applied when the saved mode has Gpu.
+# `stack start -Gpu` turns that mode on. Requests every NVIDIA GPU through CDI.
+# Some providers reject the device form nvidia.com/gpu=all; see DEPLOY.md.
+# The spec has to exist inside the machine first.
+services:
+  worker-gpu:
+    devices:
+      - nvidia.com/gpu=all
+    security_opt:
+      - label=disable

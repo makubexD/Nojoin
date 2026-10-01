@@ -1,0 +1,3 @@
+# Alpine's /bin/sh reads the shebang literally. A CRLF checkout makes it look
+# for an interpreter named "/bin/sh\r", which fails before the script runs.
+podman/nginx/05-podman-resolver.sh text eol=lf

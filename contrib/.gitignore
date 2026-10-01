@@ -1,0 +1,3 @@
+# Runtime output of the fork tooling (backups, the saved stack mode, write probes).
+# The repository .gitignore is upstream and is not edited from this branch.
+.local/
